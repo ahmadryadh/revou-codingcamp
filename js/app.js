@@ -6,9 +6,9 @@
 'use strict';
 
 // ─── Constants ───────────────────────────────────────────────
-const STORAGE_KEY      = 'budgetviz_transactions';
-const CATEGORIES_KEY   = 'budgetviz_categories';
-const THEME_KEY        = 'budgetviz_theme';
+const STORAGE_KEY    = 'budgetviz_transactions';
+const CATEGORIES_KEY = 'budgetviz_categories';
+const THEME_KEY      = 'budgetviz_theme';
 
 const DEFAULT_CATEGORIES = [
   { name: 'Food',      emoji: '🍔' },
@@ -16,59 +16,71 @@ const DEFAULT_CATEGORIES = [
   { name: 'Fun',       emoji: '🎮' },
 ];
 
-// Chart.js color palette for categories (cycles if > palette length)
+// Pastel-friendly chart colors aligned with CSS tag palette
 const CHART_COLORS = [
-  '#f97316', // Food      – orange
-  '#38bdf8', // Transport – sky
-  '#a78bfa', // Fun       – violet
-  '#22c55e', // custom 1  – green
-  '#f43f5e', // custom 2  – rose
+  '#fb923c', // Food      – soft orange
+  '#60a5fa', // Transport – soft blue
+  '#c084fc', // Fun       – soft purple
+  '#34d399', // custom 1  – mint
+  '#f472b6', // custom 2  – pink
   '#facc15', // custom 3  – yellow
-  '#14b8a6', // custom 4  – teal
-  '#e879f9', // custom 5  – fuchsia
-  '#fb923c', // custom 6  – amber
-  '#60a5fa', // custom 7  – blue
+  '#2dd4bf', // custom 4  – teal
+  '#a78bfa', // custom 5  – lavender
+  '#f97316', // custom 6  – amber
+  '#818cf8', // custom 7  – indigo
 ];
 
 // ─── State ───────────────────────────────────────────────────
-let transactions = [];       // { id, name, amount, category, date }
-let customCategories = [];   // { name, emoji }
-let chart = null;            // Chart.js instance
-let viewMonth = new Date();  // month currently shown in monthly summary
+let transactions    = [];  // { id, name, amount, category, date }
+let customCategories = []; // { name, emoji }
+let chart           = null;
+let viewMonth       = new Date();
 
 // ─── DOM References ──────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
 const dom = {
-  totalBalance:        $('totalBalance'),
-  transactionCount:    $('transactionCount'),
-  themeToggle:         $('themeToggle'),
-  themeIcon:           document.querySelector('.theme-icon'),
-  form:                $('transactionForm'),
-  itemName:            $('itemName'),
-  amount:              $('amount'),
-  category:            $('category'),
-  transactionDate:     $('transactionDate'),
-  nameError:           $('nameError'),
-  amountError:         $('amountError'),
-  categoryError:       $('categoryError'),
-  submitBtn:           $('submitBtn'),
-  transactionList:     $('transactionList'),
-  listEmpty:           $('listEmpty'),
-  chartCanvas:         $('spendingChart'),
-  chartEmpty:          $('chartEmpty'),
-  chartLegend:         $('chartLegend'),
-  filterCategory:      $('filterCategory'),
-  clearAll:            $('clearAll'),
-  toggleCustom:        $('toggleCustomCategory'),
-  customCatGroup:      $('customCategoryGroup'),
-  customCatInput:      $('customCategory'),
-  addCustomCatBtn:     $('addCustomCategory'),
-  customCatError:      $('customCategoryError'),
-  currentMonthLabel:   $('currentMonthLabel'),
-  prevMonth:           $('prevMonth'),
-  nextMonth:           $('nextMonth'),
-  monthlyStats:        $('monthlyStats'),
+  // Balance
+  totalBalance:      $('totalBalance'),
+  transactionCount:  $('transactionCount'),
+
+  // Theme
+  themeToggle:       $('themeToggle'),
+  themeIcon:         document.querySelector('.theme-icon'),
+
+  // Form
+  form:              $('transactionForm'),
+  itemName:          $('itemName'),
+  amount:            $('amount'),
+  category:          $('category'),
+  transactionDate:   $('transactionDate'),
+  nameError:         $('nameError'),
+  amountError:       $('amountError'),
+  categoryError:     $('categoryError'),
+
+  // Custom category
+  toggleCustom:      $('toggleCustomCategory'),
+  customCatGroup:    $('customCategoryGroup'),
+  customCatInput:    $('customCategory'),
+  addCustomCatBtn:   $('addCustomCategory'),
+  customCatError:    $('customCategoryError'),
+
+  // List
+  transactionList:   $('transactionList'),
+  listEmpty:         $('listEmpty'),
+  filterCategory:    $('filterCategory'),
+  clearAll:          $('clearAll'),
+
+  // Chart
+  chartCanvas:       $('spendingChart'),
+  chartEmpty:        $('chartEmpty'),
+  chartLegend:       $('chartLegend'),
+
+  // Monthly summary
+  currentMonthLabel: $('currentMonthLabel'),
+  prevMonth:         $('prevMonth'),
+  nextMonth:         $('nextMonth'),
+  monthlyStats:      $('monthlyStats'),
 };
 
 // ─── Utilities ───────────────────────────────────────────────
@@ -87,8 +99,7 @@ function formatDate(isoStr) {
 }
 
 function getTodayISO() {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
+  return new Date().toISOString().slice(0, 10);
 }
 
 function monthKey(date) {
@@ -99,32 +110,24 @@ function monthLabel(date) {
   return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
-/** Get all categories (built-in + custom) */
 function allCategories() {
   return [...DEFAULT_CATEGORIES, ...customCategories];
 }
 
-/** Find category meta (emoji etc.) by name */
 function getCategoryMeta(name) {
   return allCategories().find(c => c.name === name) || { name, emoji: '📌' };
 }
 
-/** Chart color for a given category name */
 function colorForCategory(name) {
   const cats = allCategories();
-  const idx = cats.findIndex(c => c.name === name);
+  const idx  = cats.findIndex(c => c.name === name);
   return CHART_COLORS[idx >= 0 ? idx % CHART_COLORS.length : CHART_COLORS.length - 1];
 }
 
-/** CSS class for category badge */
-function categoryClass(name) {
+/** CSS tag class: tag-Food, tag-Transport, tag-Fun, or tag-custom */
+function tagClass(name) {
   const builtIn = ['Food', 'Transport', 'Fun'];
-  return builtIn.includes(name) ? `cat-${name}` : 'cat-custom';
-}
-
-function iconClass(name) {
-  const builtIn = ['Food', 'Transport', 'Fun'];
-  return builtIn.includes(name) ? `icon-${name}` : 'icon-custom';
+  return builtIn.includes(name) ? `tag-${name}` : 'tag-custom';
 }
 
 // ─── Storage ─────────────────────────────────────────────────
@@ -157,66 +160,53 @@ function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   dom.themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
   localStorage.setItem(THEME_KEY, theme);
-
-  // Update chart colors to match theme
   if (chart) {
-    chart.options.plugins.legend.labels.color = theme === 'dark' ? '#e8eaf6' : '#1a1d2e';
+    const color = theme === 'dark' ? '#c4b5fd' : '#7c6fa0';
+    chart.options.plugins.legend.labels.color = color;
     chart.update();
   }
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'light';
-  applyTheme(current === 'dark' ? 'light' : 'dark');
+  const cur = document.documentElement.getAttribute('data-theme') || 'light';
+  applyTheme(cur === 'dark' ? 'light' : 'dark');
 }
 
 function loadTheme() {
-  const saved = localStorage.getItem(THEME_KEY) || 'light';
-  applyTheme(saved);
+  applyTheme(localStorage.getItem(THEME_KEY) || 'light');
 }
 
-// ─── Category Select ─────────────────────────────────────────
+// ─── Category Dropdowns ──────────────────────────────────────
 function rebuildCategoryDropdowns() {
-  // Main form select
+  // ── Main form select ──
   const sel = dom.category;
-  const currentVal = sel.value;
-
-  // Keep first placeholder option, remove the rest
+  const selVal = sel.value;
   while (sel.options.length > 1) sel.remove(1);
-
   allCategories().forEach(cat => {
     const opt = document.createElement('option');
     opt.value = cat.name;
     opt.textContent = `${cat.emoji} ${cat.name}`;
     sel.appendChild(opt);
   });
+  if (selVal) sel.value = selVal;
 
-  // Restore selection if still valid
-  if (currentVal) sel.value = currentVal;
-
-  // Filter dropdown
+  // ── Filter select ──
   const flt = dom.filterCategory;
   const fltVal = flt.value;
   while (flt.options.length > 1) flt.remove(1);
-
   allCategories().forEach(cat => {
     const opt = document.createElement('option');
     opt.value = cat.name;
     opt.textContent = `${cat.emoji} ${cat.name}`;
     flt.appendChild(opt);
   });
-
   if (fltVal) flt.value = fltVal;
 }
 
 // ─── Validation ──────────────────────────────────────────────
 function clearErrors() {
-  dom.nameError.textContent = '';
-  dom.amountError.textContent = '';
-  dom.categoryError.textContent = '';
-  dom.itemName.classList.remove('error');
-  dom.amount.classList.remove('error');
-  dom.category.classList.remove('error');
+  ['nameError', 'amountError', 'categoryError'].forEach(id => { $(id).textContent = ''; });
+  ['itemName', 'amount', 'category'].forEach(id => { $(id).classList.remove('error'); });
 }
 
 function validateForm() {
@@ -232,13 +222,11 @@ function validateForm() {
     dom.itemName.classList.add('error');
     valid = false;
   }
-
   if (!dom.amount.value.trim() || isNaN(amt) || amt <= 0) {
     dom.amountError.textContent = 'Enter a valid amount greater than 0.';
     dom.amount.classList.add('error');
     valid = false;
   }
-
   if (!cat) {
     dom.categoryError.textContent = 'Please select a category.';
     dom.category.classList.add('error');
@@ -248,28 +236,25 @@ function validateForm() {
   return valid;
 }
 
-// ─── Add Transaction ─────────────────────────────────────────
+// ─── Transactions CRUD ───────────────────────────────────────
 function addTransaction(name, amount, category, date) {
-  const tx = {
+  transactions.unshift({
     id: generateId(),
     name,
     amount: parseFloat(amount),
     category,
     date: date || getTodayISO(),
-  };
-  transactions.unshift(tx); // newest first
+  });
   saveTransactions();
   render();
 }
 
-// ─── Delete Transaction ──────────────────────────────────────
 function deleteTransaction(id) {
   transactions = transactions.filter(tx => tx.id !== id);
   saveTransactions();
   render();
 }
 
-// ─── Clear All ───────────────────────────────────────────────
 function clearAll() {
   if (!transactions.length) return;
   if (!confirm('Delete all transactions? This cannot be undone.')) return;
@@ -278,27 +263,26 @@ function clearAll() {
   render();
 }
 
-// ─── Render Balance ──────────────────────────────────────────
+// ─── Render: Balance ─────────────────────────────────────────
 function renderBalance() {
-  const total = transactions.reduce((sum, tx) => sum + tx.amount, 0);
+  const total = transactions.reduce((s, tx) => s + tx.amount, 0);
   dom.totalBalance.textContent = formatCurrency(total);
   dom.transactionCount.textContent =
     `${transactions.length} transaction${transactions.length !== 1 ? 's' : ''}`;
 }
 
-// ─── Render Chart ────────────────────────────────────────────
+// ─── Render: Chart (Pie) ──────────────────────────────────────
 function renderChart() {
-  // Aggregate by category
   const agg = {};
   transactions.forEach(tx => {
     agg[tx.category] = (agg[tx.category] || 0) + tx.amount;
   });
 
-  const labels  = Object.keys(agg);
-  const data    = Object.values(agg);
-  const colors  = labels.map(colorForCategory);
-
+  const labels = Object.keys(agg);
+  const data   = Object.values(agg);
+  const colors = labels.map(colorForCategory);
   const hasData = labels.length > 0;
+
   dom.chartEmpty.style.display = hasData ? 'none' : 'flex';
 
   if (!hasData) {
@@ -308,33 +292,35 @@ function renderChart() {
   }
 
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const textColor = isDark ? '#e8eaf6' : '#1a1d2e';
+  const textColor = isDark ? '#c4b5fd' : '#7c6fa0';
 
   if (chart) {
-    chart.data.labels  = labels;
-    chart.data.datasets[0].data   = data;
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = data;
     chart.data.datasets[0].backgroundColor = colors;
+    chart.data.datasets[0].borderColor = isDark ? '#241d38' : '#ffffff';
     chart.options.plugins.legend.labels.color = textColor;
     chart.update();
   } else {
     chart = new Chart(dom.chartCanvas, {
-      type: 'doughnut',
+      type: 'pie',
       data: {
         labels,
         datasets: [{
           data,
           backgroundColor: colors,
-          borderWidth: 2,
-          borderColor: isDark ? '#1a1d2e' : '#ffffff',
-          hoverOffset: 10,
+          borderWidth: 3,
+          borderColor: isDark ? '#241d38' : '#ffffff',
+          hoverOffset: 12,
         }],
       },
       options: {
-        cutout: '60%',
         responsive: true,
         maintainAspectRatio: true,
         plugins: {
-          legend: { display: false },
+          legend: {
+            display: false,
+          },
           tooltip: {
             callbacks: {
               label: ctx => {
@@ -342,19 +328,20 @@ function renderChart() {
                 const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
                 const pct   = ((val / total) * 100).toFixed(1);
                 return ` ${formatCurrency(val)} (${pct}%)`;
-              }
-            }
-          }
+              },
+            },
+          },
         },
         animation: { duration: 400 },
-      }
+      },
     });
   }
 
-  // Custom legend
+  // Custom legend below chart
+  const total = data.reduce((a, b) => a + b, 0);
   dom.chartLegend.innerHTML = labels.map((label, i) => {
     const meta = getCategoryMeta(label);
-    const pct  = ((data[i] / data.reduce((a, b) => a + b, 0)) * 100).toFixed(1);
+    const pct  = ((data[i] / total) * 100).toFixed(1);
     return `
       <div class="legend-item">
         <span class="legend-dot" style="background:${colors[i]}"></span>
@@ -363,14 +350,14 @@ function renderChart() {
   }).join('');
 }
 
-// ─── Render Transaction List ─────────────────────────────────
+// ─── Render: Transaction List ─────────────────────────────────
 function renderList() {
   const filterVal = dom.filterCategory.value;
   const filtered  = filterVal === 'all'
     ? transactions
     : transactions.filter(tx => tx.category === filterVal);
 
-  dom.listEmpty.style.display = filtered.length === 0 ? 'block' : 'none';
+  dom.listEmpty.style.display  = filtered.length === 0 ? 'block' : 'none';
   dom.transactionList.innerHTML = '';
 
   filtered.forEach(tx => {
@@ -380,40 +367,38 @@ function renderList() {
     item.setAttribute('role', 'listitem');
     item.dataset.id = tx.id;
     item.innerHTML = `
-      <div class="item-icon ${iconClass(tx.category)}" aria-hidden="true">${meta.emoji}</div>
       <div class="item-info">
         <div class="item-name" title="${tx.name}">${tx.name}</div>
+        <div class="item-amount-main">${formatCurrency(tx.amount)}</div>
         <div class="item-meta">
-          <span class="item-category ${categoryClass(tx.category)}">${tx.category}</span>
+          <span class="item-tag ${tagClass(tx.category)}">${meta.emoji} ${tx.category}</span>
           ${tx.date ? `<span class="item-date">${formatDate(tx.date)}</span>` : ''}
         </div>
       </div>
-      <span class="item-amount">${formatCurrency(tx.amount)}</span>
-      <button class="delete-btn" aria-label="Delete ${tx.name}" data-id="${tx.id}">✕</button>
+      <button class="delete-btn" aria-label="Delete ${tx.name}" data-id="${tx.id}">Delete</button>
     `;
     dom.transactionList.appendChild(item);
   });
 }
 
-// ─── Render Monthly Summary ───────────────────────────────────
+// ─── Render: Monthly Summary ──────────────────────────────────
 function renderMonthlySummary() {
   dom.currentMonthLabel.textContent = monthLabel(viewMonth);
 
-  const mk = monthKey(viewMonth);
+  const mk      = monthKey(viewMonth);
   const monthTx = transactions.filter(tx => tx.date && tx.date.startsWith(mk));
 
   if (monthTx.length === 0) {
     dom.monthlyStats.innerHTML =
-      `<p class="monthly-empty" style="grid-column:1/-1">No transactions for this month.</p>`;
+      `<p class="monthly-empty">No transactions for this month.</p>`;
     return;
   }
 
   const total = monthTx.reduce((s, tx) => s + tx.amount, 0);
 
-  // Top category
   const agg = {};
   monthTx.forEach(tx => { agg[tx.category] = (agg[tx.category] || 0) + tx.amount; });
-  const topCat = Object.entries(agg).sort((a, b) => b[1] - a[1])[0];
+  const topCat  = Object.entries(agg).sort((a, b) => b[1] - a[1])[0];
   const topMeta = getCategoryMeta(topCat[0]);
 
   dom.monthlyStats.innerHTML = `
@@ -444,46 +429,50 @@ function render() {
   renderMonthlySummary();
 }
 
-// ─── Form Submit ─────────────────────────────────────────────
+// ─── Event Listeners ─────────────────────────────────────────
+
+// Form submit
 dom.form.addEventListener('submit', e => {
   e.preventDefault();
   if (!validateForm()) return;
 
-  const name  = dom.itemName.value.trim();
-  const amt   = dom.amount.value.trim();
-  const cat   = dom.category.value;
-  const date  = dom.transactionDate.value || getTodayISO();
+  addTransaction(
+    dom.itemName.value.trim(),
+    dom.amount.value.trim(),
+    dom.category.value,
+    dom.transactionDate.value || getTodayISO(),
+  );
 
-  addTransaction(name, amt, cat, date);
-
-  // Reset form
   dom.form.reset();
   dom.transactionDate.value = getTodayISO();
   clearErrors();
 });
 
-// ─── Delete (event delegation) ───────────────────────────────
+// Delete — event delegation
 dom.transactionList.addEventListener('click', e => {
   const btn = e.target.closest('.delete-btn');
   if (btn) deleteTransaction(btn.dataset.id);
 });
 
-// ─── Clear All ───────────────────────────────────────────────
+// Clear all
 dom.clearAll.addEventListener('click', clearAll);
 
-// ─── Filter Change ───────────────────────────────────────────
+// Filter
 dom.filterCategory.addEventListener('change', renderList);
 
-// ─── Theme Toggle ────────────────────────────────────────────
+// Theme
 dom.themeToggle.addEventListener('click', toggleTheme);
 
-// ─── Custom Category ─────────────────────────────────────────
+// Custom category toggle
 dom.toggleCustom.addEventListener('click', () => {
   const hidden = dom.customCatGroup.classList.toggle('hidden');
-  dom.toggleCustom.textContent = hidden ? '+ Add custom category' : '− Hide custom category';
+  dom.toggleCustom.textContent = hidden
+    ? '+ Add custom category'
+    : '− Hide custom category';
   if (!hidden) dom.customCatInput.focus();
 });
 
+// Add custom category
 dom.addCustomCatBtn.addEventListener('click', () => {
   const raw  = dom.customCatInput.value.trim();
   const name = raw.charAt(0).toUpperCase() + raw.slice(1);
@@ -494,9 +483,7 @@ dom.addCustomCatBtn.addEventListener('click', () => {
     dom.customCatError.textContent = 'Enter a category name.';
     return;
   }
-
-  const exists = allCategories().some(c => c.name.toLowerCase() === name.toLowerCase());
-  if (exists) {
+  if (allCategories().some(c => c.name.toLowerCase() === name.toLowerCase())) {
     dom.customCatError.textContent = 'Category already exists.';
     return;
   }
@@ -505,24 +492,18 @@ dom.addCustomCatBtn.addEventListener('click', () => {
   saveCategories();
   rebuildCategoryDropdowns();
 
-  dom.customCatInput.value = '';
-  dom.category.value = name;
+  dom.customCatInput.value     = '';
+  dom.category.value           = name;
   dom.customCatError.textContent = '';
-
-  // Collapse the panel
   dom.customCatGroup.classList.add('hidden');
   dom.toggleCustom.textContent = '+ Add custom category';
 });
 
-// Allow pressing Enter in custom category input
 dom.customCatInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    dom.addCustomCatBtn.click();
-  }
+  if (e.key === 'Enter') { e.preventDefault(); dom.addCustomCatBtn.click(); }
 });
 
-// ─── Monthly Navigation ──────────────────────────────────────
+// Monthly navigation
 dom.prevMonth.addEventListener('click', () => {
   viewMonth = new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1);
   renderMonthlySummary();
@@ -530,28 +511,24 @@ dom.prevMonth.addEventListener('click', () => {
 
 dom.nextMonth.addEventListener('click', () => {
   const next = new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1);
-  // Don't navigate past current month
-  const now = new Date();
-  if (next.getFullYear() > now.getFullYear() ||
-     (next.getFullYear() === now.getFullYear() && next.getMonth() > now.getMonth())) return;
+  const now  = new Date();
+  if (
+    next.getFullYear() > now.getFullYear() ||
+    (next.getFullYear() === now.getFullYear() && next.getMonth() > now.getMonth())
+  ) return;
   viewMonth = next;
   renderMonthlySummary();
 });
 
-// ─── Init ────────────────────────────────────────────────────
+// ─── Init ─────────────────────────────────────────────────────
 function init() {
   loadTheme();
   loadTransactions();
   loadCategories();
   rebuildCategoryDropdowns();
-
-  // Set today as default date
   dom.transactionDate.value = getTodayISO();
-
-  // Set viewMonth to current month
   const now = new Date();
   viewMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
   render();
 }
 
